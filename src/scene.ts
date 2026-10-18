@@ -85,7 +85,7 @@ export function mountScene(host: HTMLElement): () => void {
     for (const point of fittingPoints) {
       distance = Math.max(distance, point.dot(direction) + Math.max(Math.abs(point.dot(right)) / tanX, Math.abs(point.dot(up)) / tanY));
     }
-    camera.position.copy(center).addScaledVector(direction, distance * 1.07);
+    camera.position.copy(center).addScaledVector(direction, distance * 1.04);
     camera.lookAt(center);
     renderer.setSize(width, height);
     renderer.render(scene, camera);

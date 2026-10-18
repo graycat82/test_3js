@@ -2,7 +2,7 @@
 
 `Pictures/`의 장난감 계산대 사진을 참고한 Three.js 웹앱. 아이폰 Safari에서 사용할 정적 웹으로 개발하며 GitHub Pages 배포 경로는 `/test_3js/`이다.
 
-현재 구현 범위는 `PLAN.md`의 1단계 개발·배포 기반과 2단계 전체 외형·기본 장면이다. 고정된 시점에서 3D 모형을 표시한다. 회전·확대·축소, 버튼 입력과 실제 계산은 후속 단계다. OPEN·스캐너·MIC는 외형만 제공한다. 스티커는 단순화한 임시 그래픽이며 사진 텍스처의 정밀 보정은 5단계다.
+현재 구현 범위는 `PLAN.md`의 1단계 개발·배포 기반과 2단계 전체 외형·기본 장면이다. 정상 화면에는 제목과 설명 없이 고정된 시점의 3D 모형만 크게 표시한다. 회전·확대·축소, 버튼 입력과 실제 계산은 후속 단계다. OPEN·스캐너·MIC는 외형만 제공한다. 스티커는 단순화한 임시 그래픽이며 사진 텍스처의 정밀 보정은 5단계다.
 
 **로컬 실행**
 
@@ -45,7 +45,7 @@ npm run preview
 
 `.github/workflows/deploy.yml`은 main 푸시 또는 수동 실행으로 의존성 설치, 타입 검사, 테스트, 빌드 후 `dist/`를 배포한다. Node 버전은 `.nvmrc`를 따른다. 원격 반영·공개 단계에서 저장소 Settings → Pages → Source를 GitHub Actions로 설정하고 Actions 실행·Pages 사용 가능 여부를 확인해야 한다.
 
-예정 공개 주소: <https://graycat82.github.io/test_3js/>. 현재 작업은 로컬 구현과 워크플로 준비까지이며, 원격 푸시·Pages 설정 변경·공개 배포는 수행하지 않는다. 실제 배포 확인은 `PLAN.md` 7단계에서 진행한다.
+공개 주소: <https://graycat82.github.io/test_3js/>. Pages의 Source는 반드시 GitHub Actions로 설정한다. Deploy from a branch의 main 루트를 사용하면 Vite로 변환되지 않은 원본 HTML이 제공되어 CSS와 모델이 표시되지 않는다. Source 변경 후 Actions → Deploy to GitHub Pages → Run workflow로 main을 실행하거나 새 커밋의 배포가 성공했는지 확인한다. Pages 활성화 전에 실패한 실행은 자동으로 재개되지 않는다. 아이폰 실기기 확인을 포함한 최종 검증은 `PLAN.md` 7단계에서 진행한다.
 
 Vite의 `base`는 `/test_3js/`다. 새 자산은 import, `new URL(..., import.meta.url)` 또는 `import.meta.env.BASE_URL`을 사용해 하위 경로를 유지한다. manifest·홈 화면 아이콘은 5단계에 추가한다.
 
