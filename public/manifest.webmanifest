@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "작은 계산대",
+  "short_name": "계산대",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eeeae3",
+  "theme_color": "#eeeae3",
+  "icons": [
+    { "src": "icons/calculator-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/calculator-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

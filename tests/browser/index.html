@@ -1,0 +1,94 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>계산대 프로덕션 통합 검증</title>
+<style>body{font:15px/1.5 system-ui;margin:20px;color:#203b45}button{margin:4px;padding:12px}iframe{position:absolute;left:560px;top:10px;width:390px;height:780px;border:1px solid #bbb}pre{max-width:510px;white-space:pre-wrap}input{width:70px}</style>
+<h1>프로덕션 통합 검증</h1><p>로컬 테스트 전용 · 합성 터치와 GPU 복구 검사</p>
+<button id="mobile">모바일 터치 검사</button><button id="lifecycle">수명주기 검사</button><button id="failure">실패 안내 검사</button>
+<p>계산 보기의 7 키 중심 (캔버스 비율): <input id="x" value="0.30" aria-label="7 키 X 비율"> <input id="y" value="0.58" aria-label="7 키 Y 비율"></p>
+<button id="view">계산 보기</button><button id="reset">프레임 초기화</button>
+<p><button id="portrait">세로 390×660</button><button id="landscape">가로 844×390</button><button id="short">높이 560</button></p><p id="frame-state"></p>
+<pre id="results" role="status">준비 중</pre><iframe id="app" title="검사 중인 계산대" src="/__qa/frame"></iframe>
+<script type="module">
+const frame = document.querySelector('#app');
+const output = document.querySelector('#results');
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const rows = [];
+function check(name, condition, details = '') { rows.push({ name, pass: !!condition, details }); output.textContent = JSON.stringify(rows, null, 2); if (!condition) throw new Error(name + ': ' + details); }
+const doc = () => frame.contentDocument;
+const win = () => frame.contentWindow;
+const canvas = () => doc().querySelector('canvas');
+const value = () => doc().querySelector('#calculator-result').textContent;
+const light = () => doc().querySelector('#calculator-result').getAttribute('aria-label').includes('켜짐');
+async function ready(query = '') {
+  Object.assign(frame.style, { left:'560px', width:'390px', height:'780px' });
+  await new Promise(resolve => { frame.onload = resolve; frame.src = '/__qa/frame' + query; });
+  for (let i = 0; i < 100 && !canvas() && doc().querySelector('#render-error').hidden; i++) await pause(50);
+  await pause(150);
+}
+function keyboard(keys) { for (const key of keys) canvas().dispatchEvent(new (win().KeyboardEvent)('keydown', {key, bubbles:true, cancelable:true})); }
+function point() { const r = canvas().getBoundingClientRect(); return [r.left + r.width * Number(document.querySelector('#x').value), r.top + r.height * Number(document.querySelector('#y').value)]; }
+function pointer(type, id, x, y, primary = true, target = canvas()) {
+  target.dispatchEvent(new (win().PointerEvent)(type, { pointerId:id, pointerType:'touch', isPrimary:primary, clientX:x, clientY:y, buttons:type==='pointerup'?0:1, button:0, bubbles:true, cancelable:true }));
+}
+function tap(x,y,id=41) { pointer('pointerdown',id,x,y); pointer('pointerup',id,x,y); }
+async function run(action) {
+  rows.length = 0; output.textContent = '실행 중';
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  try { await action(); output.textContent += '\nINTEGRATION_COMPLETE'; }
+  catch (error) { output.textContent += '\nINTEGRATION_FAILED: ' + error.message; }
+  finally { document.querySelectorAll('button').forEach(b => b.disabled = false); }
+}
+document.querySelector('#view').onclick = () => doc().querySelector('[data-action="calculatorView"]').click();
+document.querySelector('#reset').onclick = () => ready();
+document.querySelector('#portrait').onclick = () => Object.assign(frame.style, { left:'560px', width:'390px', height:'660px' });
+document.querySelector('#landscape').onclick = () => Object.assign(frame.style, { left:'400px', width:'844px', height:'390px' });
+document.querySelector('#short').onclick = () => Object.assign(frame.style, { left:'560px', width:'390px', height:'560px' });
+setInterval(() => { if (canvas()) document.querySelector('#frame-state').textContent = `${win().innerWidth}×${win().innerHeight} / LCD ${value()} / ${doc().querySelector('#calculator-result').getAttribute('aria-label')}`; }, 500);
+document.querySelector('#mobile').onclick = () => run(async () => {
+  await ready(); doc().querySelector('[data-action="calculatorView"]').click(); await pause(150);
+  check('mobile viewport', win().innerWidth === 390, String(win().innerWidth));
+  const [x,y] = point();
+  tap(x,y); check('touch tap enters 7 exactly once', value() === '7', value());
+  tap(x,y); check('rapid repeat enters 77', value() === '77', value());
+  keyboard(['Escape']); await pause(3400);
+  pointer('pointerdown',42,x,y); pointer('pointermove',42,x+70,y+10); pointer('pointerup',42,x+70,y+10);
+  check('touch drag cancels input', value()==='0' && !light(), value());
+  doc().querySelector('[data-action="calculatorView"]').click(); await pause(120);
+  pointer('pointerdown',43,x,y); pointer('pointerdown',44,x+75,y,false);
+  pointer('pointermove',44,x+150,y,false); pointer('pointerup',43,x,y); pointer('pointerup',44,x+150,y,false);
+  check('pinch and release enter no digits', value()==='0', value());
+  doc().querySelector('[data-action="calculatorView"]').click(); await pause(120);
+  pointer('pointerdown',45,x,y); pointer('pointercancel',45,x,y); pointer('pointerup',45,x,y);
+  check('pointercancel suppresses input', value()==='0', value());
+  keyboard(['1','2','+','3','4','Enter']); check('production sequential calculation', value()==='46', value());
+  check('backlight on', light()); await pause(3400); check('backlight off retains 46', value()==='46' && !light());
+  const frames = win().qa.frames, draws = win().qa.draws; await pause(400);
+  check('idle rendering stopped', frames===win().qa.frames && draws===win().qa.draws, JSON.stringify({frames, draws, later:win().qa.frames}));
+  check('no runtime errors', !win().qa.errors.length, JSON.stringify(win().qa.errors));
+});
+document.querySelector('#lifecycle').onclick = () => run(async () => {
+  await ready(); keyboard(['1','2','+','3','4','Enter']);
+  win().qa.setHidden(true); const frames = win().qa.frames; await pause(250);
+  check('hidden tab suspends frames', frames===win().qa.frames);
+  win().qa.setHidden(false); await pause(120); check('resume preserves result', value()==='46');
+  const extension = canvas().getContext('webgl2').getExtension('WEBGL_lose_context');
+  check('GPU loss extension available', !!extension);
+  extension.loseContext(); await pause(200);
+  check('real context loss shows recovery message', !doc().querySelector('#render-error').hidden && doc().querySelector('#view-controls').hidden);
+  keyboard(['7']); check('input blocked while context lost', value()==='46');
+  await pause(9000);
+  check('restore timeout offers reload', doc().querySelector('#render-error-message').textContent.includes('복구하지 못했습니다'));
+  const draws = win().qa.draws;
+  extension.restoreContext(); await pause(900);
+  check('GPU restored and rendering resumed', doc().querySelector('#render-error').hidden && win().qa.draws>draws);
+  check('restore preserves 46 and expired light', value()==='46' && !light());
+  keyboard(['Escape','7','*','8','Enter']); check('calculation after restore', value()==='56', value());
+  check('no runtime errors', !win().qa.errors.length, JSON.stringify(win().qa.errors));
+});
+document.querySelector('#failure').onclick = () => run(async () => {
+  for (const failure of ['webgl','texture']) {
+    await ready('?failure='+failure);
+    check(failure+' startup failure visible', !doc().querySelector('#render-error').hidden && !doc().querySelector('#reload-page').hidden && doc().querySelector('#view-controls').hidden);
+  }
+  await ready(); check('fresh start recovers', !!canvas() && doc().querySelector('#render-error').hidden);
+});
+frame.onload = () => { output.textContent = '준비 완료'; };
+</script></html>

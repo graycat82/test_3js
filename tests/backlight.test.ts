@@ -21,3 +21,13 @@ test('each accepted press renews the deadline; OFF clears even a renewed deadlin
   light.activate(5000);
   assert.equal(light.sample(5000).level, 1);
 });
+
+test('an early timer wake retains a positive remaining delay until the fade starts', () => {
+  const light = new Backlight();
+  light.activate(100.25);
+  const early = light.sample(3100.1);
+  assert.ok(early.wakeIn !== null && early.wakeIn > 0);
+  const nextWake = 3100.1 + Math.ceil(early.wakeIn);
+  assert.ok(light.sample(nextWake).fading);
+  assert.equal(light.sample(3400).level, 0);
+});

@@ -1,0 +1,60 @@
+{
+  "status": "INTEGRATION_COMPLETE",
+  "checks": [
+    {
+      "name": "mobile viewport",
+      "pass": true,
+      "details": "390"
+    },
+    {
+      "name": "touch tap enters 7 exactly once",
+      "pass": true,
+      "details": "7"
+    },
+    {
+      "name": "rapid repeat enters 77",
+      "pass": true,
+      "details": "77"
+    },
+    {
+      "name": "touch drag cancels input",
+      "pass": true,
+      "details": "0"
+    },
+    {
+      "name": "pinch and release enter no digits",
+      "pass": true,
+      "details": "0"
+    },
+    {
+      "name": "pointercancel suppresses input",
+      "pass": true,
+      "details": "0"
+    },
+    {
+      "name": "production sequential calculation",
+      "pass": true,
+      "details": "46"
+    },
+    {
+      "name": "backlight on",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "backlight off retains 46",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "idle rendering stopped",
+      "pass": true,
+      "details": "{\"frames\":60,\"draws\":4128,\"later\":60}"
+    },
+    {
+      "name": "no runtime errors",
+      "pass": true,
+      "details": "[]"
+    }
+  ]
+}

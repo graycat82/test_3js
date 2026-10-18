@@ -9,5 +9,5 @@ export const FUNCTION_KEYS = ['ON', 'OFF', 'AC', 'MIC'] as const;
 export const KEYPAD_SLOPE = 0.19;
 
 export function keyPosition(row: number, column: number): [number, number, number] {
-  return [-1.27 + column * 1.12, 0.13, -1.12 + row * 0.88];
+  return [-1.27 + column * 1.12, 0.13, -0.84 + row * 0.82];
 }

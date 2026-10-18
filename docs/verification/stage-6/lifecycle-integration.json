@@ -1,0 +1,55 @@
+{
+  "status": "INTEGRATION_COMPLETE",
+  "checks": [
+    {
+      "name": "hidden tab suspends frames",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "resume preserves result",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "GPU loss extension available",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "real context loss shows recovery message",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "input blocked while context lost",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "restore timeout offers reload",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "GPU restored and rendering resumed",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "restore preserves 46 and expired light",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "calculation after restore",
+      "pass": true,
+      "details": "56"
+    },
+    {
+      "name": "no runtime errors",
+      "pass": true,
+      "details": "[]"
+    }
+  ]
+}

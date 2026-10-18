@@ -12,12 +12,12 @@ export interface RegisterTextures {
 export function createRegister(textures: RegisterTextures): THREE.Group {
   const root = new THREE.Group();
   root.name = 'toy-register';
-  const plastic = (color: string, roughness = 0.25) => new THREE.MeshPhysicalMaterial({
-    color, roughness, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.22,
+  const plastic = (color: string, roughness = 0.32) => new THREE.MeshStandardMaterial({
+    color, roughness, metalness: 0,
   });
-  const navy = plastic('#0059af');
-  const cyan = plastic('#04bfd6');
-  const yellow = plastic('#ffd309');
+  const navy = plastic('#0050ad');
+  const cyan = plastic('#00b3c9');
+  const yellow = plastic('#ffcc05');
   const white = plastic('#fffdf2', 0.34);
   const red = plastic('#dc1831', 0.3);
   const dark = plastic('#183c48', 0.6);
@@ -26,7 +26,7 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
   function printMaterial(texture: THREE.Texture) {
     let material = cache.get(texture);
     if (!material) {
-      material = new THREE.MeshStandardMaterial({ map: texture, transparent: true, roughness: 0.52, depthWrite: false });
+      material = new THREE.MeshStandardMaterial({ map: texture, transparent: true, roughness: 0.7, depthWrite: false });
       cache.set(texture, material);
     }
     return material;
@@ -55,17 +55,17 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
     root.add(mesh);
   }
 
-  box(root, 'turquoise-bottom', [6.05, 0.48, 5.35], [0, 0.3, 0], cyan, 0.22);
+  box(root, 'turquoise-bottom', [6.05, 0.48, 5.65], [0, 0.3, 0.15], cyan, 0.22);
   const profile = new THREE.Shape();
   profile.moveTo(-2.38, 0.45);
   profile.lineTo(2.38, 0.45);
   profile.quadraticCurveTo(2.65, 0.45, 2.65, 0.7);
   profile.lineTo(2.65, 2.25);
   profile.quadraticCurveTo(2.65, 2.48, 2.4, 2.43);
-  profile.lineTo(-2.35, 1.52);
-  profile.quadraticCurveTo(-2.65, 1.47, -2.65, 1.18);
-  profile.lineTo(-2.65, 0.73);
-  profile.quadraticCurveTo(-2.65, 0.45, -2.38, 0.45);
+  profile.lineTo(-2.65, 1.46);
+  profile.quadraticCurveTo(-2.95, 1.41, -2.95, 1.18);
+  profile.lineTo(-2.95, 0.73);
+  profile.quadraticCurveTo(-2.95, 0.45, -2.38, 0.45);
   const housingGeometry = new THREE.ExtrudeGeometry(profile, { depth: 5.55, steps: 1, bevelEnabled: true, bevelSegments: 4, bevelSize: 0.17, bevelThickness: 0.17, curveSegments: 12 });
   housingGeometry.translate(0, 0, -2.775);
   const housing = new THREE.Mesh(housingGeometry, navy);
@@ -75,11 +75,11 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
   housing.receiveShadow = true;
   root.add(housing);
 
-  box(root, 'drawer-shadow-gap', [5.65, 0.8, 0.08], [0, 0.85, 2.74], dark, 0.06);
-  box(root, 'drawer', [5.66, 0.74, 0.22], [0, 0.8, 2.83], cyan, 0.12);
-  decal(root, 'drawer-print', textures.drawer, 5.23, 0.52, [0, 0.8, 2.947]);
-  box(root, 'drawer-lip', [5.5, 0.09, 0.29], [0, 1.15, 2.8], cyan, 0.04);
-  const opener = box(root, 'open-button', [2.35, 0.25, 0.55], [0, 1.73, 2.18], yellow, 0.15);
+  box(root, 'drawer-shadow-gap', [5.65, 0.8, 0.08], [0, 0.85, 3.04], dark, 0.06);
+  box(root, 'drawer', [5.66, 0.74, 0.22], [0, 0.8, 3.13], cyan, 0.12);
+  decal(root, 'drawer-print', textures.drawer, 5.23, 0.52, [0, 0.8, 3.247]);
+  box(root, 'drawer-lip', [5.5, 0.09, 0.29], [0, 1.15, 3.1], cyan, 0.04);
+  const opener = box(root, 'open-button', [2.35, 0.25, 0.46], [0, 1.55, 2.8], yellow, 0.12);
   opener.rotation.x = KEYPAD_SLOPE;
   const openLabel = textures.labels.get('OPEN');
   if (openLabel) {
@@ -92,7 +92,7 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
   keypad.position.set(0, 1.99, 0.21);
   keypad.rotation.x = KEYPAD_SLOPE;
   root.add(keypad);
-  box(keypad, 'keypad-recess', [4.62, 0.09, 3.68], [0.42, -0.055, 0.2], navy, 0.2);
+  box(keypad, 'keypad-recess', [4.62, 0.09, 3.46], [0.42, -0.055, 0.39], navy, 0.2);
   function key(label: string, position: [number, number, number], round: boolean) {
     const mesh = round
       ? new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.39, 0.23, 32), yellow)
@@ -110,11 +110,11 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
     }
   }
   KEY_ROWS.forEach((row, r) => row.forEach((label, c) => key(label, keyPosition(r, c), false)));
-  FUNCTION_KEYS.forEach((label, row) => key(label, [-2.38, 0.13, -1.12 + row * 0.88], true));
+  FUNCTION_KEYS.forEach((label, row) => key(label, [-2.38, 0.13, keyPosition(row, 0)[2]], true));
 
   const display = new THREE.Group();
   display.name = 'display-assembly';
-  display.position.set(0, 3.32, -1.75);
+  display.position.set(0, 3.85, -2.07);
   display.rotation.x = -0.16;
   root.add(display);
   box(display, 'screen-back', [5.32, 2.95, 0.6], [0, 0, -0.08], navy, 0.3);

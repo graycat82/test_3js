@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0050ad"/>
+  <rect x="64" y="54" width="384" height="207" rx="36" fill="#00bfd1"/>
+  <rect x="91" y="83" width="330" height="147" rx="14" fill="#c6efb4"/>
+  <g fill="#284d36">
+    <path d="m326 104 9-9h51l9 9-9 9h-51zm-2 6 9 9v31l-9 9-9-9v-31zm73 0 9 9v31l-9 9-9-9v-31zm-62 44h51l9 9-9 9h-51l-9-9zm-11 16 9 9v31l-9 9-9-9v-31zm73 0 9 9v31l-9 9-9-9v-31zm-62 44h51l9 9-9 9h-51l-9-9z"/>
+  </g>
+  <g fill="#fffdf2">
+    <rect x="162" y="284" width="70" height="62" rx="13"/><rect x="250" y="284" width="70" height="62" rx="13"/><rect x="338" y="284" width="70" height="62" rx="13"/>
+    <rect x="162" y="365" width="70" height="62" rx="13"/><rect x="250" y="365" width="70" height="62" rx="13"/><rect x="338" y="365" width="70" height="62" rx="13"/>
+  </g>
+  <g fill="#ffcf08"><circle cx="108" cy="315" r="29"/><circle cx="108" cy="395" r="29"/></g>
+  <rect x="136" y="452" width="240" height="22" rx="11" fill="#00bfd1"/>
+</svg>

@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#eeeae3" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="계산대" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icons/calculator.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%icons/calculator-180.png" />
     <meta name="description" content="사진을 참고해 만든 장난감 계산대의 Three.js 입체 모형" />
     <title>계산대</title>
   </head>
@@ -18,7 +24,10 @@
         <button type="button" data-action="resetView" aria-label="처음 보기" title="처음 보기">↺</button>
         <button type="button" data-action="calculatorView" aria-label="계산 보기" title="계산 보기">▦</button>
       </nav>
-      <div id="render-error" class="render-error" role="alert" hidden></div>
+      <div id="render-error" class="render-error" role="alert" hidden>
+        <p id="render-error-message"></p>
+        <button id="reload-page" type="button">다시 열기</button>
+      </div>
       <noscript>3D 모형을 보려면 JavaScript를 활성화해 주세요.</noscript>
     </main>
     <script type="module" src="/src/main.ts"></script>

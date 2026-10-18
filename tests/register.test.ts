@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Box3, BufferGeometry, Material, Mesh, Texture } from 'three';
+import { Box3, BufferGeometry, Material, Mesh, Texture, PerspectiveCamera, Vector3 } from 'three';
+import { KeyPicker } from '../src/input/picking.ts';
 import { createRegister } from '../src/model/register.ts';
 import { KEY_ROWS, FUNCTION_KEYS } from '../src/model/layout.ts';
 
@@ -74,5 +75,31 @@ test('keys stand above the recess and do not overlap adjacent keys', () => {
         assert.ok(overlapX <= 0 || overlapZ <= 0, `${keys[i].name} overlaps another key`);
       });
     });
+  } finally { cleanup(); }
+});
+
+test('OPEN has a separate front strip and every numeric key is visible from the calculator view', () => {
+  const { model, cleanup } = fixture();
+  try {
+    model.updateMatrixWorld(true);
+    const opener = new Box3().setFromObject(model.getObjectByName('open-button')!);
+    const keypad = model.getObjectByName('keypad')!;
+    for (const key of keypad.children.filter(child => child.name.startsWith('key-'))) {
+      const bounds = new Box3().setFromObject(key);
+      assert.ok(opener.min.z - bounds.max.z > 0.15, `${key.name}: OPEN needs a visible gap`);
+      assert.ok(!opener.intersectsBox(bounds), `${key.name}: OPEN overlaps`);
+    }
+    const display = new Box3().setFromObject(model.getObjectByName('display-assembly')!);
+    const firstRow = new Box3().setFromObject(model.getObjectByName('key-1')!);
+    assert.ok(firstRow.min.z - display.max.z > 0.08, 'space between LCD assembly and first row');
+    const camera = new PerspectiveCamera(34, 1, 0.1, 100);
+    camera.position.set(0, 10, 16);
+    camera.lookAt(0, 2.6, 0.1);
+    camera.updateMatrixWorld(true);
+    const picker = new KeyPicker();
+    for (const label of KEY_ROWS.flat()) {
+      const point = model.getObjectByName(`key-${label}`)!.getWorldPosition(new Vector3()).project(camera);
+      assert.equal(picker.pick((point.x + 1) * 500, (1 - point.y) * 500, { left: 0, top: 0, width: 1000, height: 1000 }, camera, model), label, `visible ${label}`);
+    }
   } finally { cleanup(); }
 });

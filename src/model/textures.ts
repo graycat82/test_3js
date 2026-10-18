@@ -1,6 +1,7 @@
 import { CanvasTexture, SRGBColorSpace } from 'three';
 import type { RegisterTextures } from './register.ts';
 import { FUNCTION_KEYS, KEY_ROWS } from './layout.ts';
+import atlasUrl from '../assets/sticker-atlas.webp';
 
 function texture(width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void) {
   const canvas = document.createElement('canvas');
@@ -14,52 +15,45 @@ function texture(width: number, height: number, draw: (ctx: CanvasRenderingConte
   return result;
 }
 
-export function createTextures(): RegisterTextures {
+/** Photo-guided restored atlas; only the derived WebP is shipped, never Pictures/. */
+export async function createTextures(): Promise<RegisterTextures> {
+  const image = new Image();
+  image.src = atlasUrl;
+  await image.decode();
+  const crop = (width: number, height: number, area: number[], mask = false) => texture(width, height, ctx => {
+    if (mask) {
+      // The face sticker has a raised title tab; discard the white atlas corners.
+      ctx.beginPath();
+      ctx.scale(width, height);
+      ctx.moveTo(0.32, 0.01); ctx.lineTo(0.76, 0.01);
+      ctx.quadraticCurveTo(0.78, 0.01, 0.78, 0.05);
+      ctx.lineTo(0.78, 0.12); ctx.quadraticCurveTo(0.78, 0.15, 0.81, 0.15);
+      ctx.lineTo(0.92, 0.15); ctx.quadraticCurveTo(0.96, 0.15, 0.975, 0.25);
+      ctx.lineTo(0.994, 0.93); ctx.quadraticCurveTo(0.994, 0.98, 0.97, 0.98);
+      ctx.lineTo(0.03, 0.98); ctx.quadraticCurveTo(0.005, 0.98, 0.01, 0.93);
+      ctx.lineTo(0.035, 0.29); ctx.quadraticCurveTo(0.05, 0.15, 0.10, 0.15);
+      ctx.lineTo(0.28, 0.15); ctx.quadraticCurveTo(0.31, 0.15, 0.31, 0.12);
+      ctx.lineTo(0.31, 0.05); ctx.quadraticCurveTo(0.31, 0.01, 0.32, 0.01);
+      ctx.closePath(); ctx.clip();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    ctx.drawImage(image, area[0] * image.width, area[1] * image.height, area[2] * image.width, area[3] * image.height, 0, 0, width, height);
+  });
   const labels = new Map<string, CanvasTexture>();
   for (const label of [...KEY_ROWS.flat(), ...FUNCTION_KEYS, 'OPEN']) {
     labels.set(label, texture(256, 192, ctx => {
       ctx.fillStyle = FUNCTION_KEYS.includes(label as typeof FUNCTION_KEYS[number]) || label === 'OPEN' ? '#a8141c' : '#004796';
+      const printed = label === '.' ? '•' : label;
       ctx.font = `700 ${label.length === 1 ? 143 : label === 'OPEN' ? 66 : 87}px Arial, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, 128, 103);
+      ctx.fillText(printed, 128, 103);
     }));
   }
-  const panel = texture(1024, 512, ctx => {
-    ctx.fillStyle = '#e8c553';
-    ctx.beginPath(); ctx.roundRect(0, 0, 1024, 512, 35); ctx.fill();
-    ctx.fillStyle = '#0c7197'; ctx.fillRect(0, 425, 1024, 87);
-    ctx.fillStyle = '#004f83'; ctx.fillRect(299, 0, 500, 110);
-    for (let i = 0; i < 7; i++) {
-      ctx.beginPath(); ctx.arc(332 + i * 66, 104, 33, 0, Math.PI); ctx.fill();
-    }
-    ctx.fillStyle = '#fff0a5'; ctx.font = '900 53px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('ROBOCAR POLI', 550, 71);
-    ctx.fillStyle = '#c1f4ed'; ctx.font = 'italic 25px Arial';
-    ctx.fillText('HERE WE COME TO RESCUE YOU!', 578, 475);
-    // Block graphics stand in for character artwork until the photo texture pass.
-    ctx.fillStyle = '#0259b1'; ctx.beginPath(); ctx.roundRect(32, 226, 195, 180, 30); ctx.fill();
-    ctx.fillStyle = '#d9f4ee'; ctx.beginPath(); ctx.roundRect(54, 250, 151, 65, 14); ctx.fill();
-    ctx.fillStyle = '#fffdf0'; ctx.fillRect(47, 339, 166, 44);
-    ctx.fillStyle = '#182f42';
-    ctx.beginPath(); ctx.arc(76, 400, 23, 0, Math.PI * 2); ctx.arc(185, 400, 23, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffe036'; ctx.fillRect(101, 216, 65, 18);
-    ctx.fillStyle = '#004779'; ctx.font = 'bold 34px Arial'; ctx.fillText('P', 132, 369);
-    ctx.fillStyle = '#fff4a6'; ctx.font = '30px Arial'; ctx.fillText('★', 270, 65); ctx.fillText('★', 857, 65);
-  });
-  const drawer = texture(1024, 128, ctx => {
-    ctx.fillStyle = '#059bb8'; ctx.fillRect(0, 0, 1024, 128);
-    for (let i = 0; i < 15; i++) {
-      ctx.fillStyle = '#55d7db'; ctx.beginPath(); ctx.arc(i * 90, 110, 49, Math.PI, 0); ctx.fill();
-    }
-    ctx.fillStyle = '#e5f7ed'; ctx.font = '900 66px Arial'; ctx.textAlign = 'center'; ctx.fillText('ROBOCAR POLI', 512, 86);
-    ctx.fillStyle = '#ffdc27'; ctx.font = '35px Arial'; ctx.fillText('★', 125, 80); ctx.fillText('★', 900, 80);
-  });
-  const badge = texture(256, 192, ctx => {
-    ctx.fillStyle = '#b04c24'; ctx.beginPath(); ctx.ellipse(128, 96, 123, 88, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#f9da49'; ctx.beginPath(); ctx.moveTo(38, 41); ctx.lineTo(218, 41); ctx.lineTo(128, 178); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#066794'; ctx.beginPath(); ctx.arc(128, 83, 57, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff5dc'; ctx.font = '900 39px Arial'; ctx.textAlign = 'center'; ctx.fillText('POLI', 128, 98);
-  });
-  return { labels, panel, drawer, badge };
+  return {
+    labels,
+    panel: crop(1024, 512, [0, 0, 1, 0.537], true),
+    drawer: crop(1024, 256, [0, 0.542, 1, 0.208]),
+    badge: crop(256, 128, [0, 0.753, 0.5, 0.247]),
+  };
 }

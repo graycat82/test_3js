@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRegister } from './model/register.ts';
-import { createTextures } from './model/textures.ts';
+import type { RegisterTextures } from './model/register.ts';
 import { Calculator } from './calculator/calculator.ts';
 import type { CalculatorSnapshot } from './calculator/calculator.ts';
 import { TapGesture } from './input/tap-gesture.ts';
 import { KeyPicker } from './input/picking.ts';
 import { createOrbitControls } from './input/orbit-controls.ts';
 import { createLcd } from './display/lcd.ts';
-import { Backlight, BACKLIGHT_DURATION_MS } from './display/backlight.ts';
+import { Backlight } from './display/backlight.ts';
 import { KeyAnimation } from './display/key-animation.ts';
 
 const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
@@ -28,24 +28,33 @@ export interface SceneHandle {
   cancelInput(): void;
 }
 
-export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnapshot, lit: boolean) => void): SceneHandle {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'default' });
+export type RenderStatus = 'ready' | 'lost' | 'restore-failed';
+
+export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisplay: (state: CalculatorSnapshot, lit: boolean) => void, onStatus: (status: RenderStatus) => void): SceneHandle {
+  const surface = document.createElement('canvas');
+  const context = surface.getContext('webgl2', { antialias: true, alpha: true, powerPreference: 'default' });
+  if (!context) throw new Error('WebGL 2 unavailable');
+  const renderer = new THREE.WebGLRenderer({ canvas: surface, context });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   host.append(renderer.domElement);
   const scene = new THREE.Scene();
-  const environmentGenerator = new THREE.PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const environment = environmentGenerator.fromScene(room, 0.04);
+  function createEnvironment() {
+    const generator = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    try { return generator.fromScene(room, 0.04); }
+    finally { room.dispose(); generator.dispose(); }
+  }
+  let environment = createEnvironment();
   scene.environment = environment.texture;
   scene.environmentIntensity = 0.45;
-  room.dispose();
-  environmentGenerator.dispose();
-  const register = createRegister(createTextures());
+  const register = createRegister(textures);
   scene.add(register);
   const calculator = new Calculator();
   const lcd = createLcd();
@@ -63,7 +72,7 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
   const keyLight = new THREE.DirectionalLight('#fff9eb', 2.3);
   keyLight.position.set(-5, 10, 8);
   keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.mapSize.set(1024, 1024);
   Object.assign(keyLight.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 0.5, far: 35 });
   keyLight.shadow.normalBias = 0.035;
   keyLight.shadow.bias = -0.0002;
@@ -118,24 +127,30 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
   let referenceDistance = 0;
   let framingPoints = allPoints;
   let disposed = false;
+  let contextLost = false;
   let frame = 0;
   let lastTime = 0;
   let lightTimer: ReturnType<typeof setTimeout> | undefined;
   let previouslyLit = false;
   let lastWidth = 0;
   let lastHeight = 0;
+  let lastPixelRatio = 0;
+  let restoreTimer: ReturnType<typeof setTimeout> | undefined;
 
   function requestRender() {
-    if (!disposed && !document.hidden && !frame) frame = requestAnimationFrame(draw);
+    if (!disposed && !contextLost && !document.hidden && !frame) frame = requestAnimationFrame(draw);
   }
   function draw(now: number) {
     frame = 0;
-    if (disposed) return;
+    if (disposed || contextLost || document.hidden) return;
     const delta = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 1 / 60;
     lastTime = now;
     const moving = controls.update(delta);
     const animating = animation.update(delta);
     const light = backlight.sample(now);
+    clearTimeout(lightTimer);
+    // Timers may wake just before the deadline; re-arm until fading really starts.
+    if (light.wakeIn !== null) lightTimer = setTimeout(requestRender, Math.ceil(light.wakeIn));
     lcdMesh.material.emissiveIntensity = light.level * 0.75;
     const lit = light.level > 0;
     if (lit !== previouslyLit) { previouslyLit = lit; onDisplay(calculator.snapshot, lit); }
@@ -166,9 +181,11 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
     const width = host.clientWidth;
     const height = host.clientHeight;
     if (!width || !height) return;
-    if (width === lastWidth && height === lastHeight) return;
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    if (width === lastWidth && height === lastHeight && pixelRatio === lastPixelRatio) return;
     lastWidth = width;
     lastHeight = height;
+    lastPixelRatio = pixelRatio;
     cancelInput();
     const direction = camera.position.clone().sub(controls.target).normalize();
     const zoomRatio = referenceDistance ? controls.getDistance() / referenceDistance : 1;
@@ -180,6 +197,7 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
     controls.maxDistance = referenceDistance * 2.8;
     camera.position.copy(controls.target).addScaledVector(direction, referenceDistance * THREE.MathUtils.clamp(zoomRatio, 0.35, 2.8));
     controls.update();
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height);
     requestRender();
   }
@@ -195,6 +213,7 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
     return key && calculator.accepts(key) ? key : null;
   }
   function commit(key: string) {
+    if (contextLost || document.hidden) return;
     if (!calculator.accepts(key)) return;
     const state = calculator.press(key);
     lcd.update(state);
@@ -202,12 +221,12 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
     clearTimeout(lightTimer);
     if (state.powered) {
       backlight.activate(performance.now());
-      lightTimer = setTimeout(requestRender, BACKLIGHT_DURATION_MS);
     } else backlight.off();
     onDisplay(state, state.powered);
     requestRender();
   }
   function pointerDown(event: PointerEvent) {
+    if (contextLost || document.hidden) return;
     if (event.pointerType !== 'touch' && event.button !== 0) return;
     canvas.focus({ preventScroll: true });
     gestures.down(event.pointerId, event.clientX, event.clientY, pick(event), event.isPrimary);
@@ -251,9 +270,46 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
   function visibility() {
     cancelInput();
     animation.reset();
+    lastTime = 0;
+    controls.enabled = !document.hidden && !contextLost;
     if (document.hidden && frame) { cancelAnimationFrame(frame); frame = 0; }
     else requestRender();
   }
+  function lost(event: Event) {
+    event.preventDefault();
+    contextLost = true;
+    cancelInput();
+    animation.reset();
+    controls.enabled = false;
+    cancelAnimationFrame(frame);
+    frame = lastTime = 0;
+    clearTimeout(lightTimer);
+    clearTimeout(restoreTimer);
+    onStatus('lost');
+    restoreTimer = setTimeout(() => onStatus('restore-failed'), 8000);
+  }
+  function restored() {
+    clearTimeout(restoreTimer);
+    try {
+      // Render-target pixels are lost with the context; regenerate the lighting map.
+      environment.dispose();
+      environment = createEnvironment();
+      scene.environment = environment.texture;
+      renderer.shadowMap.needsUpdate = true;
+      lcd.texture.needsUpdate = true;
+      contextLost = false;
+      controls.enabled = !document.hidden;
+      lastTime = 0;
+      onStatus('ready');
+      requestRender();
+    } catch (cause) {
+      contextLost = true;
+      onStatus('restore-failed');
+      console.error('Context restore failed:', cause);
+    }
+  }
+  canvas.addEventListener('webglcontextlost', lost);
+  canvas.addEventListener('webglcontextrestored', restored);
   canvas.addEventListener('pointerdown', pointerDown, true);
   document.addEventListener('pointerdown', outsidePointerDown, true);
   // The second touch may leave the canvas without owning pointer capture.
@@ -265,10 +321,14 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
   canvas.addEventListener('keydown', keyDown);
   window.addEventListener('blur', visibility);
   document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('pageshow', visibility);
+  window.addEventListener('resize', resize);
+  window.visualViewport?.addEventListener('resize', resize);
   const observer = new ResizeObserver(resize);
   observer.observe(host);
   resize();
   onDisplay(calculator.snapshot, false);
+  onStatus('ready');
 
   function setView(calculation: boolean) {
     cancelInput();
@@ -293,6 +353,7 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
     dispose() {
       disposed = true;
       clearTimeout(lightTimer);
+      clearTimeout(restoreTimer);
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.removeEventListener('change', requestRender);
@@ -307,6 +368,11 @@ export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnaps
       canvas.removeEventListener('keydown', keyDown);
       window.removeEventListener('blur', visibility);
       document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('pageshow', visibility);
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
+      canvas.removeEventListener('webglcontextlost', lost);
+      canvas.removeEventListener('webglcontextrestored', restored);
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
       const textures = new Set<THREE.Texture>();
