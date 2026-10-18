@@ -4,6 +4,7 @@ import { Box3, BufferGeometry, Material, Mesh, Texture, PerspectiveCamera, Vecto
 import { KeyPicker } from '../src/input/picking.ts';
 import { createRegister } from '../src/model/register.ts';
 import { KEY_ROWS, FUNCTION_KEYS } from '../src/model/layout.ts';
+import { CALCULATOR_DIRECTION, fitDistance, registerViewPoints, viewCenter } from '../src/view/framing.ts';
 
 function fixture() {
   const texture = new Texture();
@@ -100,6 +101,39 @@ test('OPEN has a separate front strip and every numeric key is visible from the 
     for (const label of KEY_ROWS.flat()) {
       const point = model.getObjectByName(`key-${label}`)!.getWorldPosition(new Vector3()).project(camera);
       assert.equal(picker.pick((point.x + 1) * 500, (1 - point.y) * 500, { left: 0, top: 0, width: 1000, height: 1000 }, camera, model), label, `visible ${label}`);
+    }
+  } finally { cleanup(); }
+});
+
+test('calculator framing keeps the LCD and every usable key visible, with room to zoom out to the whole model', () => {
+  const { model, cleanup } = fixture();
+  try {
+    const points = registerViewPoints(model);
+    const direction = CALCULATOR_DIRECTION;
+    const target = viewCenter(points.calculator, direction);
+    for (const aspect of [374 / 764, 304 / 488, 1264 / 640, 828 / 310]) {
+      const camera = new PerspectiveCamera(34, aspect, 0.1, 200);
+      const distance = fitDistance(points.calculator, target, direction, aspect, camera.fov);
+      camera.position.copy(target).addScaledVector(direction, distance);
+      camera.lookAt(target);
+      camera.updateMatrixWorld(true);
+      for (const point of points.calculator) {
+        const projected = point.clone().project(camera);
+        assert.ok(Math.abs(projected.x) < 0.99 && Math.abs(projected.y) < 0.99, `calculator clipped at aspect ${aspect}`);
+        assert.ok(projected.z > -1 && projected.z < 1);
+      }
+      const picker = new KeyPicker();
+      for (const label of [...KEY_ROWS.flat(), 'ON', 'OFF', 'AC']) {
+        const point = model.getObjectByName(`key-${label}`)!.getWorldPosition(new Vector3()).project(camera);
+        assert.equal(picker.pick((point.x + 1) * 500, (1 - point.y) * 500, { left: 0, top: 0, width: 1000, height: 1000 }, camera, model), label, `${label} blocked at aspect ${aspect}`);
+      }
+      const zoomLimit = Math.max(distance * 2.8, fitDistance(points.all, target, direction, aspect, camera.fov) * 1.25);
+      camera.position.copy(target).addScaledVector(direction, zoomLimit);
+      camera.updateMatrixWorld(true);
+      for (const point of points.all) {
+        const projected = point.clone().project(camera);
+        assert.ok(Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1, `whole model unavailable at aspect ${aspect}`);
+      }
     }
   } finally { cleanup(); }
 });

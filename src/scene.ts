@@ -10,6 +10,7 @@ import { createOrbitControls } from './input/orbit-controls.ts';
 import { createLcd } from './display/lcd.ts';
 import { Backlight } from './display/backlight.ts';
 import { KeyAnimation } from './display/key-animation.ts';
+import { CALCULATOR_DIRECTION, fitDistance, registerViewPoints, viewCenter } from './view/framing.ts';
 
 const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
   default: new THREE.Vector3(0.78, 0.78, 1.65),
@@ -24,7 +25,7 @@ export interface SceneHandle {
   zoomIn(): void;
   zoomOut(): void;
   resetView(): void;
-  calculatorView(): void;
+  overview(): void;
   cancelInput(): void;
 }
 
@@ -87,45 +88,24 @@ export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisp
   floor.receiveShadow = true;
   scene.add(floor);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
-  const bounds = new THREE.Box3().setFromObject(register);
-  const defaultTarget = bounds.getCenter(new THREE.Vector3());
-  const allPoints: THREE.Vector3[] = [];
-  const calculatorPoints: THREE.Vector3[] = [];
-  register.traverse(object => {
-    if (!(object instanceof THREE.Mesh)) return;
-    object.geometry.computeBoundingBox();
-    const box = object.geometry.boundingBox!;
-    for (const x of [box.min.x, box.max.x]) {
-      for (const y of [box.min.y, box.max.y]) {
-        for (const z of [box.min.z, box.max.z]) {
-          const point = new THREE.Vector3(x, y, z).applyMatrix4(object.matrixWorld);
-          allPoints.push(point);
-          if (object.parent?.name === 'keypad' || object.parent?.name === 'display-assembly') calculatorPoints.push(point);
-        }
-      }
-    }
-  });
-  const requestedView = new URLSearchParams(window.location.search).get('view') ?? 'default';
-  const initialDirection = (Object.hasOwn(VIEW_DIRECTIONS, requestedView) ? VIEW_DIRECTIONS[requestedView] : VIEW_DIRECTIONS.default).clone().normalize();
-  const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), initialDirection).normalize();
-  const up = new THREE.Vector3().crossVectors(initialDirection, right).normalize();
-  // Center the visible silhouette, rather than the empty corners of a world box.
-  const horizontal = allPoints.map(point => point.clone().sub(defaultTarget).dot(right));
-  const vertical = allPoints.map(point => point.clone().sub(defaultTarget).dot(up));
-  defaultTarget.addScaledVector(right, (Math.min(...horizontal) + Math.max(...horizontal)) / 2)
-    .addScaledVector(up, (Math.min(...vertical) + Math.max(...vertical)) / 2);
-  camera.position.copy(defaultTarget).addScaledVector(initialDirection, 20);
+  const { all: allPoints, calculator: calculatorPoints } = registerViewPoints(register);
+  const requestedView = new URLSearchParams(window.location.search).get('view') ?? '';
+  const startInCalculator = !Object.hasOwn(VIEW_DIRECTIONS, requestedView);
+  const initialDirection = (startInCalculator ? CALCULATOR_DIRECTION : VIEW_DIRECTIONS[requestedView]).clone().normalize();
+  const initialPoints = startInCalculator ? calculatorPoints : allPoints;
+  const initialTarget = viewCenter(initialPoints, initialDirection);
+  camera.position.copy(initialTarget).addScaledVector(initialDirection, 20);
   const canvas = renderer.domElement;
   canvas.tabIndex = 0;
   canvas.setAttribute('aria-label', '3D 계산대. 드래그로 회전, 두 손가락 또는 휠로 확대·축소, 계산 키를 탭해 입력');
   const controls = createOrbitControls(camera, canvas);
-  controls.target.copy(defaultTarget);
+  controls.target.copy(initialTarget);
   const gestures = new TapGesture();
   const picker = new KeyPicker();
   const animation = new KeyAnimation(register);
   const backlight = new Backlight();
   let referenceDistance = 0;
-  let framingPoints = allPoints;
+  let framingPoints = initialPoints;
   let disposed = false;
   let contextLost = false;
   let frame = 0;
@@ -160,17 +140,10 @@ export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisp
   }
   controls.addEventListener('change', requestRender);
 
-  function fitDistance(points: THREE.Vector3[], target: THREE.Vector3, direction: THREE.Vector3) {
-    const viewRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
-    const viewUp = new THREE.Vector3().crossVectors(direction, viewRight).normalize();
-    const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const tanX = tanY * camera.aspect;
-    let distance = 0;
-    for (const worldPoint of points) {
-      const point = worldPoint.clone().sub(target);
-      distance = Math.max(distance, point.dot(direction) + Math.max(Math.abs(point.dot(viewRight)) / tanX, Math.abs(point.dot(viewUp)) / tanY));
-    }
-    return distance * 1.04;
+  function updateDistanceLimits(direction: THREE.Vector3) {
+    controls.minDistance = referenceDistance * 0.35;
+    // Zooming out from the calculator must reveal the microphone, scanner and cord too.
+    controls.maxDistance = Math.max(referenceDistance * 2.8, fitDistance(allPoints, controls.target, direction, camera.aspect, camera.fov) * 1.25);
   }
   function settleControls() {
     controls.enableDamping = false;
@@ -192,10 +165,9 @@ export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisp
     settleControls();
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    referenceDistance = fitDistance(framingPoints, controls.target, direction);
-    controls.minDistance = referenceDistance * 0.35;
-    controls.maxDistance = referenceDistance * 2.8;
-    camera.position.copy(controls.target).addScaledVector(direction, referenceDistance * THREE.MathUtils.clamp(zoomRatio, 0.35, 2.8));
+    referenceDistance = fitDistance(framingPoints, controls.target, direction, camera.aspect, camera.fov);
+    updateDistanceLimits(direction);
+    camera.position.copy(controls.target).addScaledVector(direction, referenceDistance * THREE.MathUtils.clamp(zoomRatio, 0.35, controls.maxDistance / referenceDistance));
     controls.update();
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height);
@@ -330,16 +302,14 @@ export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisp
   onDisplay(calculator.snapshot, false);
   onStatus('ready');
 
-  function setView(calculation: boolean) {
+  function setView(calculation: boolean, direction: THREE.Vector3) {
     cancelInput();
     settleControls();
     framingPoints = calculation ? calculatorPoints : allPoints;
-    const target = calculation ? new THREE.Vector3(0, 2.6, 0.1) : defaultTarget;
-    const direction = calculation ? new THREE.Vector3(0, 0.9, 1.8).normalize() : initialDirection;
+    const target = viewCenter(framingPoints, direction);
     controls.target.copy(target);
-    referenceDistance = fitDistance(framingPoints, target, direction);
-    controls.minDistance = referenceDistance * 0.35;
-    controls.maxDistance = referenceDistance * 2.8;
+    referenceDistance = fitDistance(framingPoints, target, direction, camera.aspect, camera.fov);
+    updateDistanceLimits(direction);
     camera.position.copy(target).addScaledVector(direction, referenceDistance);
     controls.update();
     requestRender();
@@ -347,8 +317,8 @@ export function mountScene(host: HTMLElement, textures: RegisterTextures, onDisp
   return {
     zoomIn() { cancelInput(); controls.dollyIn(0.8); requestRender(); },
     zoomOut() { cancelInput(); controls.dollyOut(0.8); requestRender(); },
-    resetView() { setView(false); },
-    calculatorView() { setView(true); },
+    resetView() { setView(startInCalculator, initialDirection); },
+    overview() { setView(false, VIEW_DIRECTIONS.default.clone().normalize()); },
     cancelInput,
     dispose() {
       disposed = true;

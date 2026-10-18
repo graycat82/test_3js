@@ -29,7 +29,7 @@ try {
   }, renderStatus);
   toolbar.hidden = false;
   toolbar.addEventListener('pointerdown', scene.cancelInput);
-  const actions = { zoomIn: scene.zoomIn, zoomOut: scene.zoomOut, resetView: scene.resetView, calculatorView: scene.calculatorView };
+  const actions = { zoomIn: scene.zoomIn, zoomOut: scene.zoomOut, resetView: scene.resetView, overview: scene.overview };
   const buttons = toolbar.querySelectorAll<HTMLButtonElement>('button[data-action]');
   const listeners = [...buttons].map(button => {
     const listener = () => actions[button.dataset.action as keyof typeof actions]();

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FUNCTION_KEYS, KEYPAD_SLOPE, KEY_ROWS, keyPosition } from './layout.ts';
+import { createMicrophoneBodyGeometry, createOpenButtonGeometry, createScannerGripGeometry, createScannerHeadGeometry, scannerGripSection } from './accessory-geometry.ts';
 
 export interface RegisterTextures {
   labels: ReadonlyMap<string, THREE.Texture>;
@@ -18,6 +19,7 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
   const navy = plastic('#0050ad');
   const cyan = plastic('#00b3c9');
   const yellow = plastic('#ffcc05');
+  const yellowSeam = plastic('#e9af05', 0.42);
   const white = plastic('#fffdf2', 0.34);
   const red = plastic('#dc1831', 0.3);
   const dark = plastic('#183c48', 0.6);
@@ -32,7 +34,10 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
     return material;
   }
   function box(parent: THREE.Object3D, name: string, size: [number, number, number], position: [number, number, number], material: THREE.Material, radius = 0.15) {
-    const mesh = new THREE.Mesh(new RoundedBoxGeometry(...size, 3, radius), material);
+    return solid(parent, name, new RoundedBoxGeometry(...size, 3, radius), position, material);
+  }
+  function solid(parent: THREE.Object3D, name: string, geometry: THREE.BufferGeometry, position: [number, number, number], material: THREE.Material) {
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.name = name;
     mesh.position.set(...position);
     mesh.castShadow = true;
@@ -79,11 +84,11 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
   box(root, 'drawer', [5.66, 0.74, 0.22], [0, 0.8, 3.13], cyan, 0.12);
   decal(root, 'drawer-print', textures.drawer, 5.23, 0.52, [0, 0.8, 3.247]);
   box(root, 'drawer-lip', [5.5, 0.09, 0.29], [0, 1.15, 3.1], cyan, 0.04);
-  const opener = box(root, 'open-button', [2.35, 0.25, 0.46], [0, 1.55, 2.8], yellow, 0.12);
+  const opener = solid(root, 'open-button', createOpenButtonGeometry(), [0, 1.55, 2.8], yellow);
   opener.rotation.x = KEYPAD_SLOPE;
   const openLabel = textures.labels.get('OPEN');
   if (openLabel) {
-    const print = decal(opener, 'open-label', openLabel, 1.84, 0.36, [0, 0.135, 0]);
+    const print = decal(opener, 'open-label', openLabel, 1.84, 0.32, [0, 0.135, -0.02]);
     print.rotation.x = -Math.PI / 2;
   }
 
@@ -128,22 +133,37 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
 
   // Scanner rests beside the register. Its proportions are inferred from the photos.
   box(root, 'scanner-dock', [0.65, 1.0, 2.35], [3.21, 0.86, -0.03], navy, 0.2);
-  box(root, 'scanner-cradle', [1.29, 0.43, 1.39], [3.96, 0.69, -0.78], yellow, 0.2);
+  box(root, 'scanner-cradle', [1.55, 0.26, 1.77], [3.92, 0.67, -0.72], yellow, 0.12);
   const scanner = new THREE.Group();
   scanner.name = 'scanner';
   scanner.position.set(4.1, 0.72, 0.07);
   scanner.rotation.y = -0.12;
   scanner.rotation.x = -0.06;
   root.add(scanner);
-  box(scanner, 'scanner-handle', [0.76, 0.64, 2.68], [0, 0.02, 0.72], yellow, 0.27);
-  box(scanner, 'scanner-head', [1.69, 0.84, 1.64], [0, 0.25, -0.74], yellow, 0.38);
-  box(scanner, 'scanner-trigger', [0.43, 0.16, 0.49], [0, 0.36, 0.12], yellow, 0.08);
-  const badge = decal(scanner, 'scanner-badge', textures.badge, 1.03, 0.81, [0, 0.68, -0.74]);
+  solid(scanner, 'scanner-handle', createScannerGripGeometry(), [0, 0, 0], yellow);
+  solid(scanner, 'scanner-head-rim', createScannerHeadGeometry(true), [0, 0.10, 0], yellowSeam);
+  solid(scanner, 'scanner-head', createScannerHeadGeometry(), [0, 0.30, 0], yellow);
+  box(scanner, 'scanner-trigger', [0.5, 0.24, 0.43], [0, -0.11, 0.12], yellow, 0.07);
+  const badge = decal(scanner, 'scanner-badge', textures.badge, 1.26, 0.61, [0, 0.716, -0.90]);
   badge.rotation.x = -Math.PI / 2;
-  tube('scanner-cable', [[3.11, 0.6, 1.89], [3.32, 0.12, 2.68], [4.48, 0.1, 3.01], [4.93, 0.13, 2.4], [4.33, 0.73, 2.03]], 0.055);
+  for (const side of [-1, 1]) {
+    for (const z of [1.02, 2.37]) {
+      const section = scannerGripSection(z);
+      const recess = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16), yellowSeam);
+      recess.name = 'scanner-grip-recess';
+      recess.rotation.y = side * Math.PI / 2;
+      recess.position.set(side * (section.radiusX + 0.002), section.centerY, z);
+      scanner.add(recess);
+    }
+  }
+  const cableCollar = solid(scanner, 'scanner-cable-collar', new THREE.CylinderGeometry(0.085, 0.10, 0.20, 20), [0, -0.12, 2.7], yellow);
+  cableCollar.rotation.x = Math.PI / 2;
+  scanner.updateMatrixWorld(true);
+  const cableEnd = scanner.localToWorld(new THREE.Vector3(0, -0.12, 2.81));
+  tube('scanner-cable', [[3.11, 0.55, 1.89], [3.35, 0.15, 3.05], [4.40, 0.1, 3.55], [4.86, 0.16, 3.13], cableEnd.toArray()], 0.055);
 
   box(root, 'microphone-socket', [0.42, 0.64, 0.53], [-3.0, 1.98, -1.8], navy, 0.16);
-  tube('microphone-stem', [[-3.03, 2.15, -1.77], [-3.13, 2.91, -1.75], [-3.49, 3.7, -1.7], [-4.01, 4.13, -1.56]], 0.064);
+  tube('microphone-stem', [[-3.03, 2.15, -1.77], [-3.13, 2.91, -1.82], [-3.49, 3.7, -1.90], [-3.99, 4.16, -1.90]], 0.064);
   const mic = new THREE.Group();
   mic.name = 'flower-microphone';
   mic.position.set(-4.04, 4.16, -1.55);
@@ -153,18 +173,18 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
     const angle = Math.PI / 2 + i * 2 * Math.PI / 5;
     const petal = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 12), red);
     petal.name = `petal-${i}`;
-    petal.scale.set(0.88, 1.06, 0.22);
+    petal.scale.set(0.88, 1.06, 0.12);
     petal.position.set(Math.cos(angle) * 0.38, Math.sin(angle) * 0.38, 0);
     petal.castShadow = true;
     mic.add(petal);
   }
-  const grille = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.3, 0.32, 32), yellow);
-  grille.name = 'microphone-grille';
-  grille.rotation.x = Math.PI / 2;
-  grille.position.z = 0.16;
-  mic.add(grille);
+  solid(mic, 'microphone-body', createMicrophoneBodyGeometry(), [0, 0, 0], yellow);
+  const collar = solid(mic, 'microphone-rear-collar', new THREE.CylinderGeometry(0.14, 0.19, 0.29, 24), [0, 0, -0.22], yellow);
+  collar.rotation.x = Math.PI / 2;
+  solid(mic, 'microphone-grille', new THREE.TorusGeometry(0.252, 0.012, 6, 40), [0, 0, 0.816], yellowSeam);
+  solid(mic, 'microphone-cap-seam', new THREE.TorusGeometry(0.279, 0.006, 6, 40), [0, 0, 0.64], yellowSeam);
   for (let i = -2; i <= 2; i++) {
-    const slot = box(mic, `mic-slot-${i}`, [0.045, 0.25 - Math.abs(i) * 0.033, 0.012], [i * 0.075, 0, 0.326], dark, 0.008);
+    const slot = box(mic, `mic-slot-${i}`, [0.045, 0.25 - Math.abs(i) * 0.033, 0.008], [i * 0.075, 0, 0.826], dark, 0.008);
     slot.rotation.z = 0.5;
   }
   for (const x of [-2.3, 2.3]) {

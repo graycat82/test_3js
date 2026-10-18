@@ -1,0 +1,20 @@
+{
+  "status": "INTEGRATION_COMPLETE",
+  "checks": [
+    {
+      "name": "webgl startup failure visible",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "texture startup failure visible",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "fresh start recovers",
+      "pass": true,
+      "details": ""
+    }
+  ]
+}
