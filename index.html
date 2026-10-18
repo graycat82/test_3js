@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#eeeae3" />
+    <meta name="description" content="사진을 참고해 만든 장난감 계산대의 Three.js 입체 모형" />
+    <title>작은 계산대 · 3D 모형</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="masthead">
+        <a class="wordmark" href="%BASE_URL%"><span class="brand-dot"></span> 작은 계산대</a>
+        <span class="edition">모형 미리보기 <span class="edition-dot">·</span> 01</span>
+      </header>
+      <main>
+        <div class="intro"><p class="eyebrow">사진에서 입체로</p><h1>손끝의 작은 가게.</h1><p class="subtitle">익숙한 장난감을 새로운 시선으로 만나보세요.</p></div>
+        <section class="stage" aria-label="장난감 계산대 3D 외형 미리보기" aria-busy="true">
+          <div id="viewport" role="img" aria-label="파란색 계산대, 청록색 LCD 프레임, 흰색 숫자 키와 노란색 스캐너의 3D 모형"></div>
+          <div class="stage-caption"><span class="live-dot"></span><span id="render-status" role="status">3D 모형을 준비하고 있습니다</span></div>
+          <span class="stage-number" aria-hidden="true">MODEL / 001</span>
+          <div id="render-error" class="render-error" role="alert" hidden></div>
+        </section>
+        <footer class="details"><div><span class="detail-label">현재 단계</span><p>외형과 기본 장면</p></div><p class="scope-note">회전·확대·축소와 계산 기능은 다음 단계에서 제공됩니다.<br />OPEN · 스캐너 · MIC는 외형만 재현했습니다.</p></footer>
+      </main>
+      <noscript>3D 모형을 보려면 JavaScript를 활성화해 주세요.</noscript>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

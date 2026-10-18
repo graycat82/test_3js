@@ -1,0 +1,53 @@
+# Dependencies and build output
+node_modules/
+/dist/
+
+# Tool caches and generated TypeScript metadata
+.vite/
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Temporary work files, including per-run unit test files
+/.tmp/
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Generated test output (keep permanent fixtures and selected evidence tracked)
+/coverage/
+/.nyc_output/
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Local environment values (track sanitized examples only)
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+!.env.*.template
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local editor and operating system files
+/.idea/
+/.vscode/*
+!/.vscode/extensions.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Intentionally tracked: package-lock.json, Pictures/, source assets,
+# tests/fixtures/, docs/verification/, AGENTS.md, PLAN.md and workflow files.
