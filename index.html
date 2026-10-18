@@ -11,6 +11,13 @@
     <main id="app" class="stage" aria-label="계산대 3D 모형" aria-busy="true">
       <div id="viewport" role="img" aria-label="파란색 계산대, 청록색 LCD 프레임, 흰색 숫자 키와 노란색 스캐너의 3D 모형"></div>
       <span id="render-status" class="sr-only" role="status">3D 모형을 준비하고 있습니다</span>
+      <output id="calculator-result" class="sr-only" aria-live="polite" aria-atomic="true"></output>
+      <nav id="view-controls" aria-label="시점 조작" hidden>
+        <button type="button" data-action="zoomIn" aria-label="확대" title="확대">＋</button>
+        <button type="button" data-action="zoomOut" aria-label="축소" title="축소">−</button>
+        <button type="button" data-action="resetView" aria-label="처음 보기" title="처음 보기">↺</button>
+        <button type="button" data-action="calculatorView" aria-label="계산 보기" title="계산 보기">▦</button>
+      </nav>
       <div id="render-error" class="render-error" role="alert" hidden></div>
       <noscript>3D 모형을 보려면 JavaScript를 활성화해 주세요.</noscript>
     </main>

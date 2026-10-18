@@ -17,6 +17,33 @@ html, body { margin: 0; width: 100%; height: 100%; }
   inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
 }
 canvas { display: block; width: 100%; height: 100%; }
+canvas:focus-visible { outline: 2px solid #09879a; outline-offset: -2px; }
+#view-controls {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid #263b4320;
+  border-radius: 26px;
+  background: #f8f6efcf;
+}
+#view-controls[hidden] { display: none; }
+#view-controls button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #264d52;
+  font: 23px/1 sans-serif;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#view-controls button:hover { background: #dde6df; }
+#view-controls button:active { background: #c8d9d0; }
+#view-controls button:focus-visible { outline: 2px solid #09879a; }
 .sr-only {
   position: absolute;
   width: 1px;

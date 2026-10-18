@@ -2,6 +2,14 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRegister } from './model/register.ts';
 import { createTextures } from './model/textures.ts';
+import { Calculator } from './calculator/calculator.ts';
+import type { CalculatorSnapshot } from './calculator/calculator.ts';
+import { TapGesture } from './input/tap-gesture.ts';
+import { KeyPicker } from './input/picking.ts';
+import { createOrbitControls } from './input/orbit-controls.ts';
+import { createLcd } from './display/lcd.ts';
+import { Backlight, BACKLIGHT_DURATION_MS } from './display/backlight.ts';
+import { KeyAnimation } from './display/key-animation.ts';
 
 const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
   default: new THREE.Vector3(0.78, 0.78, 1.65),
@@ -11,7 +19,16 @@ const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
   right: new THREE.Vector3(1.8, 0.75, 0.5),
 };
 
-export function mountScene(host: HTMLElement): () => void {
+export interface SceneHandle {
+  dispose(): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  resetView(): void;
+  calculatorView(): void;
+  cancelInput(): void;
+}
+
+export function mountScene(host: HTMLElement, onDisplay: (state: CalculatorSnapshot, lit: boolean) => void): SceneHandle {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'default' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -30,6 +47,18 @@ export function mountScene(host: HTMLElement): () => void {
   environmentGenerator.dispose();
   const register = createRegister(createTextures());
   scene.add(register);
+  const calculator = new Calculator();
+  const lcd = createLcd();
+  const lcdMesh = register.getObjectByName('lcd') as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
+  lcdMesh.material.map = lcd.texture;
+  lcdMesh.material.emissiveMap = lcd.texture;
+  lcdMesh.material.emissive.set('#ccffb4');
+  lcdMesh.material.emissiveIntensity = 0;
+  lcdMesh.material.color.set('#ffffff');
+  lcdMesh.material.roughness = 0.62;
+  lcdMesh.material.metalness = 0;
+  lcdMesh.material.needsUpdate = true;
+  lcd.update(calculator.snapshot);
   scene.add(new THREE.HemisphereLight('#f6faff', '#b1b9ad', 0.85));
   const keyLight = new THREE.DirectionalLight('#fff9eb', 2.3);
   keyLight.position.set(-5, 10, 8);
@@ -50,69 +79,252 @@ export function mountScene(host: HTMLElement): () => void {
   scene.add(floor);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
   const bounds = new THREE.Box3().setFromObject(register);
-  const center = bounds.getCenter(new THREE.Vector3());
-  const fittingPoints: THREE.Vector3[] = [];
+  const defaultTarget = bounds.getCenter(new THREE.Vector3());
+  const allPoints: THREE.Vector3[] = [];
+  const calculatorPoints: THREE.Vector3[] = [];
   register.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
     object.geometry.computeBoundingBox();
     const box = object.geometry.boundingBox!;
     for (const x of [box.min.x, box.max.x]) {
       for (const y of [box.min.y, box.max.y]) {
-        for (const z of [box.min.z, box.max.z]) fittingPoints.push(new THREE.Vector3(x, y, z).applyMatrix4(object.matrixWorld).sub(center));
+        for (const z of [box.min.z, box.max.z]) {
+          const point = new THREE.Vector3(x, y, z).applyMatrix4(object.matrixWorld);
+          allPoints.push(point);
+          if (object.parent?.name === 'keypad' || object.parent?.name === 'display-assembly') calculatorPoints.push(point);
+        }
       }
     }
   });
   const requestedView = new URLSearchParams(window.location.search).get('view') ?? 'default';
-  const direction = (VIEW_DIRECTIONS[requestedView] ?? VIEW_DIRECTIONS.default).clone().normalize();
-  const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
-  const up = new THREE.Vector3().crossVectors(direction, right).normalize();
+  const initialDirection = (Object.hasOwn(VIEW_DIRECTIONS, requestedView) ? VIEW_DIRECTIONS[requestedView] : VIEW_DIRECTIONS.default).clone().normalize();
+  const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), initialDirection).normalize();
+  const up = new THREE.Vector3().crossVectors(initialDirection, right).normalize();
   // Center the visible silhouette, rather than the empty corners of a world box.
-  const horizontal = fittingPoints.map(point => point.dot(right));
-  const vertical = fittingPoints.map(point => point.dot(up));
-  const shift = right.clone().multiplyScalar((Math.min(...horizontal) + Math.max(...horizontal)) / 2)
+  const horizontal = allPoints.map(point => point.clone().sub(defaultTarget).dot(right));
+  const vertical = allPoints.map(point => point.clone().sub(defaultTarget).dot(up));
+  defaultTarget.addScaledVector(right, (Math.min(...horizontal) + Math.max(...horizontal)) / 2)
     .addScaledVector(up, (Math.min(...vertical) + Math.max(...vertical)) / 2);
-  center.add(shift);
-  fittingPoints.forEach(point => point.sub(shift));
+  camera.position.copy(defaultTarget).addScaledVector(initialDirection, 20);
+  const canvas = renderer.domElement;
+  canvas.tabIndex = 0;
+  canvas.setAttribute('aria-label', '3D 계산대. 드래그로 회전, 두 손가락 또는 휠로 확대·축소, 계산 키를 탭해 입력');
+  const controls = createOrbitControls(camera, canvas);
+  controls.target.copy(defaultTarget);
+  const gestures = new TapGesture();
+  const picker = new KeyPicker();
+  const animation = new KeyAnimation(register);
+  const backlight = new Backlight();
+  let referenceDistance = 0;
+  let framingPoints = allPoints;
+  let disposed = false;
+  let frame = 0;
+  let lastTime = 0;
+  let lightTimer: ReturnType<typeof setTimeout> | undefined;
+  let previouslyLit = false;
+  let lastWidth = 0;
+  let lastHeight = 0;
+
+  function requestRender() {
+    if (!disposed && !document.hidden && !frame) frame = requestAnimationFrame(draw);
+  }
+  function draw(now: number) {
+    frame = 0;
+    if (disposed) return;
+    const delta = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 1 / 60;
+    lastTime = now;
+    const moving = controls.update(delta);
+    const animating = animation.update(delta);
+    const light = backlight.sample(now);
+    lcdMesh.material.emissiveIntensity = light.level * 0.75;
+    const lit = light.level > 0;
+    if (lit !== previouslyLit) { previouslyLit = lit; onDisplay(calculator.snapshot, lit); }
+    renderer.render(scene, camera);
+    if (moving || animating || light.fading) requestRender();
+    if (!frame) lastTime = 0;
+  }
+  controls.addEventListener('change', requestRender);
+
+  function fitDistance(points: THREE.Vector3[], target: THREE.Vector3, direction: THREE.Vector3) {
+    const viewRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
+    const viewUp = new THREE.Vector3().crossVectors(direction, viewRight).normalize();
+    const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const tanX = tanY * camera.aspect;
+    let distance = 0;
+    for (const worldPoint of points) {
+      const point = worldPoint.clone().sub(target);
+      distance = Math.max(distance, point.dot(direction) + Math.max(Math.abs(point.dot(viewRight)) / tanX, Math.abs(point.dot(viewUp)) / tanY));
+    }
+    return distance * 1.04;
+  }
+  function settleControls() {
+    controls.enableDamping = false;
+    controls.update();
+    controls.enableDamping = true;
+  }
   function resize() {
     const width = host.clientWidth;
     const height = host.clientHeight;
     if (!width || !height) return;
+    if (width === lastWidth && height === lastHeight) return;
+    lastWidth = width;
+    lastHeight = height;
+    cancelInput();
+    const direction = camera.position.clone().sub(controls.target).normalize();
+    const zoomRatio = referenceDistance ? controls.getDistance() / referenceDistance : 1;
+    settleControls();
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const tanX = tanY * camera.aspect;
-    let distance = 0;
-    for (const point of fittingPoints) {
-      distance = Math.max(distance, point.dot(direction) + Math.max(Math.abs(point.dot(right)) / tanX, Math.abs(point.dot(up)) / tanY));
-    }
-    camera.position.copy(center).addScaledVector(direction, distance * 1.04);
-    camera.lookAt(center);
+    referenceDistance = fitDistance(framingPoints, controls.target, direction);
+    controls.minDistance = referenceDistance * 0.35;
+    controls.maxDistance = referenceDistance * 2.8;
+    camera.position.copy(controls.target).addScaledVector(direction, referenceDistance * THREE.MathUtils.clamp(zoomRatio, 0.35, 2.8));
+    controls.update();
     renderer.setSize(width, height);
-    renderer.render(scene, camera);
+    requestRender();
   }
+  function cancelInput() {
+    gestures.reset();
+    animation.press(null);
+    controls.disconnect();
+    controls.connect(canvas);
+    requestRender();
+  }
+  function pick(event: PointerEvent) {
+    const key = picker.pick(event.clientX, event.clientY, canvas.getBoundingClientRect(), camera, register);
+    return key && calculator.accepts(key) ? key : null;
+  }
+  function commit(key: string) {
+    if (!calculator.accepts(key)) return;
+    const state = calculator.press(key);
+    lcd.update(state);
+    animation.pulse(key);
+    clearTimeout(lightTimer);
+    if (state.powered) {
+      backlight.activate(performance.now());
+      lightTimer = setTimeout(requestRender, BACKLIGHT_DURATION_MS);
+    } else backlight.off();
+    onDisplay(state, state.powered);
+    requestRender();
+  }
+  function pointerDown(event: PointerEvent) {
+    if (event.pointerType !== 'touch' && event.button !== 0) return;
+    canvas.focus({ preventScroll: true });
+    gestures.down(event.pointerId, event.clientX, event.clientY, pick(event), event.isPrimary);
+    animation.press(gestures.pressedKey);
+    requestRender();
+  }
+  function outsidePointerDown(event: PointerEvent) {
+    if (event.target === canvas || event.pointerType !== 'touch' || !gestures.activeCount) return;
+    gestures.down(event.pointerId, event.clientX, event.clientY, null, false);
+    animation.press(null);
+    requestRender();
+  }
+  function pointerMove(event: PointerEvent) {
+    if (!gestures.isTracking(event.pointerId)) return;
+    gestures.move(event.pointerId, event.clientX, event.clientY);
+    animation.press(gestures.pressedKey);
+    requestRender();
+  }
+  function pointerUp(event: PointerEvent) {
+    if (!gestures.isTracking(event.pointerId)) return;
+    const key = gestures.up(event.pointerId, event.clientX, event.clientY, pick(event));
+    animation.press(null);
+    if (key) commit(key);
+    requestRender();
+  }
+  function pointerCancel(event: PointerEvent) {
+    if (!gestures.isTracking(event.pointerId)) return;
+    gestures.cancelPointer(event.pointerId);
+    animation.press(null);
+    requestRender();
+  }
+  function wheel() { gestures.cancel(); animation.press(null); }
+  function keyDown(event: KeyboardEvent) {
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = ({ '*': '×', '/': '÷', '-': '−', Enter: '=', '=': '=', Escape: 'AC', Delete: 'AC', o: 'ON' } as Record<string, string>)[event.key] ?? event.key;
+    if (!calculator.accepts(key)) return;
+    event.preventDefault();
+    cancelInput();
+    commit(key);
+  }
+  function visibility() {
+    cancelInput();
+    animation.reset();
+    if (document.hidden && frame) { cancelAnimationFrame(frame); frame = 0; }
+    else requestRender();
+  }
+  canvas.addEventListener('pointerdown', pointerDown, true);
+  document.addEventListener('pointerdown', outsidePointerDown, true);
+  // The second touch may leave the canvas without owning pointer capture.
+  document.addEventListener('pointermove', pointerMove, true);
+  document.addEventListener('pointerup', pointerUp, true);
+  document.addEventListener('pointercancel', pointerCancel, true);
+  canvas.addEventListener('lostpointercapture', pointerCancel);
+  canvas.addEventListener('wheel', wheel, { capture: true, passive: true });
+  canvas.addEventListener('keydown', keyDown);
+  window.addEventListener('blur', visibility);
+  document.addEventListener('visibilitychange', visibility);
   const observer = new ResizeObserver(resize);
   observer.observe(host);
   resize();
+  onDisplay(calculator.snapshot, false);
 
-  return () => {
-    observer.disconnect();
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    const textures = new Set<THREE.Texture>();
-    scene.traverse(object => {
-      if (!(object instanceof THREE.Mesh)) return;
-      geometries.add(object.geometry);
-      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-        materials.add(material);
-        if ('map' in material && material.map instanceof THREE.Texture) textures.add(material.map);
-      }
-    });
-    geometries.forEach(geometry => geometry.dispose());
-    materials.forEach(material => material.dispose());
-    textures.forEach(texture => texture.dispose());
-    keyLight.shadow.dispose();
-    environment.dispose();
-    renderer.dispose();
-    renderer.domElement.remove();
+  function setView(calculation: boolean) {
+    cancelInput();
+    settleControls();
+    framingPoints = calculation ? calculatorPoints : allPoints;
+    const target = calculation ? new THREE.Vector3(0, 2.6, 0.1) : defaultTarget;
+    const direction = calculation ? new THREE.Vector3(0, 0.9, 1.8).normalize() : initialDirection;
+    controls.target.copy(target);
+    referenceDistance = fitDistance(framingPoints, target, direction);
+    controls.minDistance = referenceDistance * 0.35;
+    controls.maxDistance = referenceDistance * 2.8;
+    camera.position.copy(target).addScaledVector(direction, referenceDistance);
+    controls.update();
+    requestRender();
+  }
+  return {
+    zoomIn() { cancelInput(); controls.dollyIn(0.8); requestRender(); },
+    zoomOut() { cancelInput(); controls.dollyOut(0.8); requestRender(); },
+    resetView() { setView(false); },
+    calculatorView() { setView(true); },
+    cancelInput,
+    dispose() {
+      disposed = true;
+      clearTimeout(lightTimer);
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      controls.removeEventListener('change', requestRender);
+      controls.dispose();
+      canvas.removeEventListener('pointerdown', pointerDown, true);
+      document.removeEventListener('pointerdown', outsidePointerDown, true);
+      document.removeEventListener('pointermove', pointerMove, true);
+      document.removeEventListener('pointerup', pointerUp, true);
+      document.removeEventListener('pointercancel', pointerCancel, true);
+      canvas.removeEventListener('lostpointercapture', pointerCancel);
+      canvas.removeEventListener('wheel', wheel, true);
+      canvas.removeEventListener('keydown', keyDown);
+      window.removeEventListener('blur', visibility);
+      document.removeEventListener('visibilitychange', visibility);
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
+      scene.traverse(object => {
+        if (!(object instanceof THREE.Mesh)) return;
+        geometries.add(object.geometry);
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          materials.add(material);
+          if ('map' in material && material.map instanceof THREE.Texture) textures.add(material.map);
+        }
+      });
+      geometries.forEach(geometry => geometry.dispose());
+      materials.forEach(material => material.dispose());
+      textures.forEach(texture => texture.dispose());
+      keyLight.shadow.dispose();
+      environment.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
   };
 }

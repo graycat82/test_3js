@@ -98,7 +98,7 @@ export function createRegister(textures: RegisterTextures): THREE.Group {
       ? new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.39, 0.23, 32), yellow)
       : new THREE.Mesh(new RoundedBoxGeometry(0.94, 0.25, 0.72, 3, 0.12), white);
     mesh.name = `key-${label}`;
-    mesh.userData = { label, interactive: false, role: label === 'MIC' ? 'decoration' : 'calculator-key' };
+    mesh.userData = { label, interactive: label !== 'MIC', role: label === 'MIC' ? 'decoration' : 'calculator-key' };
     mesh.position.set(...position);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
